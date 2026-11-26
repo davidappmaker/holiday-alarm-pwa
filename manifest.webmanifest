@@ -1,0 +1,16 @@
+{
+  "name": "闹钟 · 节假日与农历提醒",
+  "short_name": "闹钟",
+  "description": "支持普通/轮班/定时/特殊周期/年度/月度闹钟，可添加到安卓与 iOS 桌面",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f2f7",
+  "theme_color": "#2f7cf6",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

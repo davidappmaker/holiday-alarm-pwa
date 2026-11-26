@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#f2f2f7">
+  <meta name="description" content="节假日闹钟 · 支持农历/公历/轮班/年度/月度等多种闹钟格式，可添加到安卓与 iOS 桌面">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="闹钟">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <title>闹钟 · 节假日与农历提醒</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app" id="app">
+
+    <!-- ============ 首页 ============ -->
+    <section class="page active" id="page-home">
+      <header class="home-header">
+        <div class="home-header-top">
+          <button class="pro-badge" id="pro-badge">👑 专业版 &gt;</button>
+          <button class="icon-btn" id="btn-search" aria-label="搜索">🔍</button>
+        </div>
+        <div class="home-date-row">
+          <span id="today-line">11-26 周四 12:22:40</span>
+          <span class="holiday-tag" id="holiday-line">Thanksgiving Day</span>
+        </div>
+        <button class="mute-chip" id="mute-chip">🔇 您已静音</button>
+      </header>
+      <div class="search-bar hidden" id="search-bar">
+        <input type="search" id="alarm-search" placeholder="搜索闹钟名称 / 备注">
+      </div>
+      <main class="scroll-body" id="alarm-groups"></main>
+    </section>
+
+    <!-- ============ 日程 ============ -->
+    <section class="page" id="page-calendar">
+      <header class="cal-header">
+        <button class="month-picker" id="month-picker">11月 <span class="caret">⌄</span><small>2026</small></button>
+        <div class="cal-actions">
+          <button id="btn-overtime">加班</button>
+          <button id="btn-vacation">休假</button>
+          <button id="btn-delete-day" class="danger">删除</button>
+          <button id="btn-cal-info" class="circle-info">!</button>
+        </div>
+      </header>
+      <main class="scroll-body cal-body">
+        <div class="week-row"><span>周日</span><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span></div>
+        <div class="calendar-grid" id="calendar-grid"></div>
+        <div class="day-detail" id="day-detail"></div>
+      </main>
+    </section>
+
+    <!-- ============ 添加 / 编辑闹钟 ============ -->
+    <section class="page form-page" id="page-add">
+      <header class="form-header">
+        <button class="back-btn" id="add-back">‹</button>
+        <h1 id="add-title">添加闹钟</h1>
+        <button class="save-btn" id="add-save">保存并退出</button>
+      </header>
+      <main class="scroll-body form-body">
+        <div class="time-wheel" id="time-wheel">
+          <div class="wheel-col" data-col="date"></div>
+          <div class="wheel-col" data-col="hour"></div>
+          <div class="wheel-col" data-col="minute"></div>
+          <div class="wheel-mask"></div>
+        </div>
+        <div class="segmented" id="calendar-tabs">
+          <button class="active" data-tab="solar">公历</button>
+          <button data-tab="lunar">农历</button>
+          <button data-tab="flexible">弹性</button>
+        </div>
+        <div class="form-list">
+          <button class="form-row" id="row-type"><span>闹钟类型</span><span class="value blue" id="val-type">年度闹钟 <span class="chev">›</span></span></button>
+          <div class="form-row"><span>闹钟名称</span><input id="val-name" placeholder="请输入闹钟名称"></div>
+          <button class="form-row" id="row-ringtone"><span>铃声</span><span class="value" id="val-ringtone">雷达.m4r <span class="chev">›</span></span></button>
+          <button class="form-row" id="row-early"><span>提前 <span class="hint-icon">ⓘ</span></span><span class="value" id="val-early">不提前 <span class="chev">›</span></span></button>
+          <button class="form-row" id="row-snooze"><span>稍后提醒</span><span class="value" id="val-snooze">不推迟 <span class="chev">›</span></span></button>
+          <div class="form-section-label">更多</div>
+          <div class="form-row"><span>备注 🎙</span><input id="val-note" placeholder="请输入备注"></div>
+          <button class="form-row" id="row-start"><span>起始于</span><span class="value" id="val-start">请选择起始年份 <span class="chev">›</span></span></button>
+          <div class="form-row"><span>打开</span><input id="val-openapp" placeholder="关闭闹钟时要跳转的App"></div>
+          <div class="form-row"><span>重复</span><input id="val-repeat" placeholder="如：每周一 / 每 3 天"></div>
+        </div>
+        <p class="form-tip">提示：闹钟数据保存在本机浏览器中。添加到桌面后可全屏使用。</p>
+      </main>
+    </section>
+
+    <!-- ============ 闹钟类型选择（子页面） ============ -->
+    <section class="page form-page" id="page-types">
+      <header class="form-header">
+        <button class="back-btn" id="types-back">‹</button>
+        <h1>闹钟类型</h1>
+        <button class="dont-show" id="dont-show">☑ 下次不弹出</button>
+      </header>
+      <main class="scroll-body type-list" id="type-list"></main>
+    </section>
+
+    <!-- ============ 提醒 ============ -->
+    <section class="page" id="page-reminders">
+      <header class="simple-header">提醒</header>
+      <main class="scroll-body reminders-body" id="reminders-list"></main>
+    </section>
+
+    <!-- ============ 我的 ============ -->
+    <section class="page" id="page-profile">
+      <header class="profile-header">
+        <div class="profile-watermark">🕘</div>
+        <button class="profile-settings" id="profile-settings" aria-label="设置">⚙️</button>
+        <button class="profile-share" id="profile-share" aria-label="分享">↗</button>
+        <div class="profile-user">
+          <div class="avatar">👤</div>
+          <div><strong>点击登录</strong><p>登录后，所有闹钟可保存到账号下</p></div>
+        </div>
+      </header>
+      <main class="scroll-body profile-body">
+        <div class="pro-banner">
+          <div><strong>开通专业版</strong><p>订阅获取全部功能</p></div>
+          <button id="btn-pro">立即开通</button>
+        </div>
+        <div class="profile-card">
+          <button data-action="help"><span class="ico green">❓</span>使用帮助</button>
+          <button data-action="feedback"><span class="ico blue-ico">💬</span>意见反馈</button>
+          <button data-action="install"><span class="ico purple">📲</span>添加到桌面 <small class="new-tag">推荐</small></button>
+        </div>
+        <div class="profile-card">
+          <button data-action="rate"><span class="ico yellow">⭐</span>去 AppStore 评分</button>
+          <button data-action="holidays"><span class="ico blue-ico">🔍</span>获取最新节假日数据</button>
+          <button data-action="ringtone"><span class="ico green">🎵</span>制作手机铃声工具推荐</button>
+          <button data-action="version"><span class="ico yellow">⏰</span>App 版本更新</button>
+          <button data-action="test"><span class="ico purple">🔔</span>测试通知与铃声</button>
+          <button data-action="reset"><span class="ico red">🗑️</span>清空本机数据</button>
+        </div>
+        <p class="version-text">闹钟 PWA v1.0.0 · 本地数据版</p>
+      </main>
+    </section>
+
+    <!-- ============ 底部导航 ============ -->
+    <nav class="tabbar" id="tabbar">
+      <button data-tab="home" class="active"><span class="tab-ico">🏠</span><span>首页</span></button>
+      <button data-tab="calendar"><span class="tab-ico">📅</span><span>日程</span></button>
+      <button class="tab-add" data-tab="add" aria-label="添加闹钟">＋</button>
+      <button data-tab="reminders"><span class="tab-ico">🔔</span><span>提醒</span></button>
+      <button data-tab="profile"><span class="tab-ico">☺️</span><span>我的</span></button>
+    </nav>
+
+    <!-- ============ 通用弹层 ============ -->
+    <div class="sheet-mask hidden" id="sheet-mask">
+      <div class="sheet" id="sheet">
+        <div class="sheet-title" id="sheet-title">请选择</div>
+        <div id="sheet-options"></div>
+        <button class="sheet-cancel" id="sheet-cancel">取消</button>
+      </div>
+    </div>
+    <div class="toast hidden" id="toast"></div>
+  </div>
+  <script src="js/calendar.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
