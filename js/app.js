@@ -83,15 +83,23 @@
         case 'yearly': {
           const start = alarm.startDate || alarm.date;
           if (start && date < new Date(start + 'T00:00:00')) { ok = false; break; }
-          const md = (alarm.date || start || Cal.key(date)).slice(5);
-          ok = Cal.key(date).slice(5) === md;
+          if (alarm.calendarMode === 'lunar' && alarm.lunarDate) {
+            ok = Cal.lunarKey(date) === alarm.lunarDate;
+          } else {
+            const md = (alarm.date || start || Cal.key(date)).slice(5);
+            ok = Cal.key(date).slice(5) === md;
+          }
           break;
         }
         case 'monthly': {
           const start = alarm.startDate || alarm.date;
           if (start && date < new Date(start + 'T00:00:00')) { ok = false; break; }
-          const dayNum = +(alarm.date || start || Cal.key(date)).slice(8);
-          ok = date.getDate() === Math.min(dayNum, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate());
+          if (alarm.calendarMode === 'lunar' && alarm.lunarDate) {
+            ok = Cal.lunarParts(date).day === alarm.lunarDate.split('-')[1];
+          } else {
+            const dayNum = +(alarm.date || start || Cal.key(date)).slice(8);
+            ok = date.getDate() === Math.min(dayNum, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate());
+          }
           break;
         }
         case 'cycle': {
@@ -290,7 +298,7 @@
     const now = new Date();
     return { id: null, type: 'yearly', time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
       date: Cal.key(now), startDate: '', name: '', note: '', ringtone: '雷达.m4r', early: '不提前', snooze: '不推迟',
-      calendarMode: 'solar', repeat: '', openApp: '', enabled: true, skipped: [] };
+      calendarMode: 'solar', lunarDate: '', repeat: '', openApp: '', enabled: true, skipped: [] };
   }
   function openEditor(alarm) {
     draft = alarm ? Object.assign(newDraft(), JSON.parse(JSON.stringify(alarm))) : newDraft();
@@ -339,8 +347,12 @@
   });
   $('#calendar-tabs').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
-    draft.calendarMode = b.dataset.tab; renderForm();
-    toast(b.dataset.tab === 'lunar' ? '已切换农历日期（按选中日期的农历日处理）' : b.dataset.tab === 'flexible' ? '弹性模式：前后 15 分钟内随机响铃' : '已切换公历日期');
+    const oldHour = Math.min(23, Math.round($('.wheel-col[data-col="hour"]').scrollTop / 44));
+    const oldMin = Math.min(59, Math.round($('.wheel-col[data-col="minute"]').scrollTop / 44));
+    draft.calendarMode = b.dataset.tab; renderForm(); buildWheel();
+    $('.wheel-col[data-col="hour"]').scrollTop = oldHour * 44;
+    $('.wheel-col[data-col="minute"]').scrollTop = oldMin * 44;
+    toast(b.dataset.tab === 'lunar' ? '日期列已切换为农历，按农历月日响铃' : b.dataset.tab === 'flexible' ? '弹性模式：前后 15 分钟内随机响铃' : '日期列已切换为公历');
   };
   function cycleType() { const keys = Object.keys(TYPES); draft.type = keys[(keys.indexOf(draft.type) + 1) % keys.length]; renderForm(); }
   function renderTypes() {
@@ -361,17 +373,31 @@
 
   /* 时间滚轮 */
   let wheelDates = [];
+  function updateWheelHint() {
+    const idx = Math.max(0, Math.min(wheelDates.length - 1, Math.round($('.wheel-col[data-col="date"]').scrollTop / 44)));
+    const d = wheelDates[idx]; if (!d) return;
+    $('#wheel-hint').textContent = draft.calendarMode === 'lunar'
+      ? '选中农历：' + Cal.lunarFull(d) + '（对应公历 ' + Cal.shortDate(d) + '）'
+      : '选中公历：' + Cal.fullDate(d) + ' · 农历 ' + Cal.lunarFull(d);
+  }
+  $('.wheel-col[data-col="date"]').addEventListener('scroll', updateWheelHint);
   function buildWheel() {
     const base = new Date((draft.date || Cal.key(new Date())) + 'T00:00:00');
     wheelDates = Array.from({ length: 14 }, (_, i) => Cal.addDays(base, i));
     const dateCol = $('.wheel-col[data-col="date"]');
-    dateCol.innerHTML = wheelDates.map((d, i) => '<div class="wheel-item">' + (i === 0 ? '今天' : i === 1 ? '明天' : Cal.shortDate(d) + ' ' + Cal.weekdayCN(d)) + '</div>').join('');
+    const lunar = draft.calendarMode === 'lunar';
+    dateCol.innerHTML = wheelDates.map((d, i) => {
+      const prefix = i === 0 ? '今天' : i === 1 ? '明天' : Cal.weekdayCN(d);
+      const label = lunar ? prefix + ' · ' + Cal.lunarFull(d) : i === 0 ? '今天' : i === 1 ? '明天' : Cal.shortDate(d) + ' ' + Cal.weekdayCN(d);
+      return '<div class="wheel-item">' + label + '</div>';
+    }).join('');
     $('.wheel-col[data-col="hour"]').innerHTML = Array.from({ length: 24 }, (_, i) => '<div class="wheel-item">' + String(i).padStart(2, '0') + '</div>').join('');
     $('.wheel-col[data-col="minute"]').innerHTML = Array.from({ length: 60 }, (_, i) => '<div class="wheel-item">' + String(i).padStart(2, '0') + '</div>').join('');
     const [h, m] = draft.time.split(':').map(Number);
     dateCol.scrollTop = 0;
     $('.wheel-col[data-col="hour"]').scrollTop = h * 44;
     $('.wheel-col[data-col="minute"]').scrollTop = m * 44;
+    updateWheelHint();
   }
   function readWheel() {
     const idx = col => Math.max(0, Math.round($(col).scrollTop / 44));
@@ -379,6 +405,8 @@
     const h = Math.min(23, idx('.wheel-col[data-col="hour"]'));
     const m = Math.min(59, idx('.wheel-col[data-col="minute"]'));
     draft.date = Cal.key(d);
+    if (draft.calendarMode === 'lunar') draft.lunarDate = Cal.lunarKey(d);
+    else draft.lunarDate = '';
     draft.time = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
   }
 

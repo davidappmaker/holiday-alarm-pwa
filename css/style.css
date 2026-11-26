@@ -110,6 +110,7 @@ input { border: 0; outline: 0; background: transparent; }
 .wheel-col[data-col="hour"], .wheel-col[data-col="minute"] { flex: 0 0 82px; }
 .wheel-col[data-col="hour"] .wheel-item, .wheel-col[data-col="minute"] .wheel-item { font-size: 24px; }
 .wheel-mask { position: absolute; left: 0; right: 0; top: 94px; height: 44px; border-top: 1px solid #d8d8de; border-bottom: 1px solid #d8d8de; pointer-events: none; }
+.wheel-hint { text-align: center; color: var(--blue); font-size: 13px; margin: -2px 16px 8px; min-height: 18px; }
 .segmented { display: flex; background: #e9e9ee; border-radius: 12px; margin: 12px 16px; padding: 3px; }
 .segmented button { flex: 1; padding: 9px 0; border-radius: 9px; color: #4a4a50; font-size: 15px; }
 .segmented button.active { background: #fff; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,.08); }

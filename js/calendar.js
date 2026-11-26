@@ -2,16 +2,29 @@
 window.Cal = (function () {
   const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
+  let lunarFormatter = null;
+  const lunarCache = new Map();
   function parts(date) {
     try {
-      const f = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { dateStyle: 'full' });
+      if (!lunarFormatter) lunarFormatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { dateStyle: 'full' });
       const out = {};
-      f.formatToParts(date).forEach(p => { out[p.type] = p.value; });
+      lunarFormatter.formatToParts(date).forEach(p => { out[p.type] = p.value; });
       return out;
     } catch (e) { return {}; }
   }
-  function lunarDay(date) { return parts(date).day || ''; }
-  function lunarFull(date) { const p = parts(date); return (p.month || '') + (p.day || ''); }
+  function lunarParts(date) {
+    const k = key(date);
+    let v = lunarCache.get(k);
+    if (!v) {
+      const p = parts(date);
+      v = { month: p.month || '', day: p.day || '' };
+      lunarCache.set(k, v);
+    }
+    return v;
+  }
+  function lunarDay(date) { return lunarParts(date).day; }
+  function lunarFull(date) { const p = lunarParts(date); return p.month + p.day; }
+  function lunarKey(date) { const p = lunarParts(date); return p.month + '-' + p.day; }
 
   function nthWeekday(year, month, weekday, nth) {
     const d = new Date(year, month, 1);
@@ -50,5 +63,5 @@ window.Cal = (function () {
   function weekdayCN(date) { return WEEK[date.getDay()]; }
   function shortDate(date) { return (date.getMonth() + 1) + '-' + String(date.getDate()).padStart(2, '0'); }
   function fullDate(date) { return key(date) + ' ' + weekdayCN(date); }
-  return { lunarDay, lunarFull, holiday, buildMonth, addDays, weekdayCN, shortDate, fullDate, key, sameDay };
+  return { lunarDay, lunarFull, lunarParts, lunarKey, holiday, buildMonth, addDays, weekdayCN, shortDate, fullDate, key, sameDay };
 })();
