@@ -1,9 +1,10 @@
 /* 离线缓存：添加到桌面后可无网络打开 */
-const CACHE = 'alarm-pwa-v5';
+const CACHE = 'alarm-pwa-v6';
 const SHELL = [
   './', './index.html', './css/style.css', './js/app.js', './js/calendar.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
-  './icons/apple-touch-icon.png', './icons/favicon.svg'
+  './icons/apple-touch-icon.png', './icons/favicon.svg',
+  './sounds/classic.wav', './sounds/default.wav', './sounds/radar.wav', './sounds/alarm.wav'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

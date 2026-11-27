@@ -13,7 +13,15 @@
     yearly:  { label: '年度闹钟', emoji: '📅', desc: '一年响一次,可用于生日和各种节日,纪念日(不支持强力模式)' },
     monthly: { label: '月度闹钟', emoji: '🌙', desc: '一个月响一次,可用于还信用卡,房贷等(不支持强力模式)' }
   };
-  const RINGTONES = ['雷达.m4r', '系统默认', '鸟鸣', '轻音乐', '无铃声'];
+  const RINGTONES = ['经典铃声', '系统默认', '雷达', '闹铃', '无铃声'];
+  const RINGTONE_FILES = {
+    '经典铃声': 'sounds/classic.wav',
+    '系统默认': 'sounds/default.wav',
+    '雷达': 'sounds/radar.wav',
+    '闹铃': 'sounds/alarm.wav',
+    // 兼容旧存档中的名称
+    '雷达.m4r': 'sounds/radar.wav', '鸟鸣': 'sounds/radar.wav', '轻音乐': 'sounds/classic.wav'
+  };
   const EARLY = ['不提前', '提前5分钟', '提前15分钟', '提前30分钟', '提前1小时'];
   const SNOOZE = ['不推迟', '5分钟后', '10分钟后', '15分钟后'];
   const YEARS = ['不限起始年份', '2025', '2026', '2027', '2028', '2029', '2030'];
@@ -391,7 +399,7 @@
   function newDraft() {
     const now = new Date();
     return { id: null, type: 'yearly', time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
-      date: Cal.key(now), startDate: '', name: '', note: '', ringtone: '雷达.m4r', early: '不提前', snooze: '不推迟',
+      date: Cal.key(now), startDate: '', name: '', note: '', ringtone: '经典铃声', early: '不提前', snooze: '不推迟',
       calendarMode: 'solar', lunarDate: '', repeat: '', openApp: '', enabled: true, skipped: [] };
   }
   function openEditor(alarm) {
@@ -588,22 +596,30 @@
     o.connect(g).connect(ctx.destination);
     o.start(at); o.stop(at + dur + .02);
   }
-  /* 用 Web Audio 合成 4 种铃声，无需音频文件，离线也能试听 */
+  /* 内置经典铃声：优先播放 WAV 文件；加载失败时用 Web Audio 合成兜底 */
+  let ringAudio = null;
   function playRingtone(name) {
     if (!name || name === '无铃声') return;
+    const file = RINGTONE_FILES[name] || RINGTONE_FILES['系统默认'];
+    try {
+      if (!ringAudio) ringAudio = new Audio();
+      ringAudio.pause();
+      ringAudio.src = file;
+      ringAudio.currentTime = 0;
+      ringAudio.volume = 1;
+      ringAudio.onerror = () => synthFallback(name);
+      ringAudio.play().catch(() => synthFallback(name));
+    } catch (e) { synthFallback(name); }
+  }
+  function synthFallback(name) {
     try {
       const ctx = audio(), t = ctx.currentTime + .03;
-      if (name === '雷达.m4r') {
+      if (name === '雷达' || name === '雷达.m4r' || name === '鸟鸣') {
         [0, .42, .84].forEach(d => { note(ctx, t + d, .30, 'sine', 1500, 620, .28); note(ctx, t + d + .04, .24, 'triangle', 760, 420, .1); });
-      } else if (name === '鸟鸣') {
-        [0, .20, .40, .60, .80].forEach((d, i) => {
-          note(ctx, t + d, .11, 'sine', 1700 + (i % 2) * 450, 2900, .18);
-          note(ctx, t + d + .12, .09, 'sine', 2700, 1900, .12);
-        });
-      } else if (name === '轻音乐') {
-        [523.25, 659.25, 783.99, 1046.5, 783.99, 659.25].forEach((f, i) => note(ctx, t + i * .22, .42, 'triangle', f, f, .16));
+      } else if (name === '闹铃') {
+        [0, .22, .44, .66].forEach((d, i) => note(ctx, t + d, .14, 'square', i % 2 ? 660 : 880, i % 2 ? 660 : 880, .16));
       } else {
-        [0, .28, .56].forEach((d, i) => note(ctx, t + d, .24, 'sine', [880, 1100, 880][i], [880, 1320, 880][i], .26));
+        [880, 1100, 880].forEach((d, i) => note(ctx, t + i * .28, .24, 'sine', [880, 1100, 880][i], [880, 1320, 880][i], .26));
       }
     } catch (e) { /* 浏览器不支持音频时忽略 */ }
   }
