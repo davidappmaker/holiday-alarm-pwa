@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const KEY = 'holiday_alarm_pwa_v1';
-  const VERSION = 'v1.3.0';
+  const VERSION = 'v1.4.0';
   const VERSION_DATE = '2026-11-27';
   const $ = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
@@ -210,7 +210,9 @@
           'DTEND:' + icsLocal(end),
           'SUMMARY:' + icsText(title),
           'DESCRIPTION:' + icsText(desc || '闹钟提醒'));
+        // 同时给出 DISPLAY 与 AUDIO 两种提醒动作，提升各日历 App 响铃概率
         lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(title + ' 时间到'), 'TRIGGER:-PT0M', 'END:VALARM');
+        lines.push('BEGIN:VALARM', 'ACTION:AUDIO', 'TRIGGER:-PT0M', 'ATTACH;VALUE=URI:Basso', 'END:VALARM');
         const em = earlyMinutes(a);
         if (em > 0) lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(title + ' 提前提醒'), 'TRIGGER:-PT' + em + 'M', 'END:VALARM');
         lines.push('END:VEVENT');
@@ -239,7 +241,29 @@
     toast('已生成 ' + out.count + ' 条提醒，请在下载中打开并添加到日历');
   }
   function exportCalendar() {
-    openSheet('导出到系统日历', Object.keys(EXPORT_DAYS), v => downloadICS(EXPORT_DAYS[v]));
+    openSheet('导出到系统日历', Object.keys(EXPORT_DAYS).concat(['🔔 2分钟响铃测试']), v => {
+      if (v.indexOf('测试') >= 0) exportTestReminder(); else downloadICS(EXPORT_DAYS[v]);
+    });
+  }
+  /* 生成一个 2 分钟后响的单条测试事件，用来验证导入→锁屏→响铃整条链路 */
+  function exportTestReminder() {
+    const now = new Date();
+    const at = new Date(now.getTime() + 2 * 60000);
+    at.setSeconds(0, 0);
+    const uid = 'test-' + Date.now() + '@holiday-alarm-pwa';
+    const lines = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Holiday Alarm PWA//ZH',
+      'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+      'BEGIN:VEVENT', 'UID:' + uid, 'DTSTAMP:' + icsUTC(now),
+      'DTSTART:' + icsLocal(at), 'DTEND:' + icsLocal(new Date(at.getTime() + 5 * 60000)),
+      'SUMMARY:🔔 响铃测试（' + String(at.getHours()).padStart(2, '0') + ':' + String(at.getMinutes()).padStart(2, '0') + '）',
+      'DESCRIPTION:导入本日历后锁屏等待，验证到点是否能响铃',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:响铃测试', 'TRIGGER:-PT0M', 'END:VALARM',
+      'BEGIN:VALARM', 'ACTION:AUDIO', 'TRIGGER:-PT0M', 'ATTACH;VALUE=URI:Basso', 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR'
+    ];
+    saveBlob(lines.map(icsFold).join('\r\n') + '\r\n', '响铃测试-' + Cal.key(now) + '.ics');
+    toast('已生成 2 分钟后的测试提醒：导入日历后锁屏等待即可验证');
   }
   function saveBlob(content, filename) {
     const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
@@ -629,6 +653,15 @@
       case 'feedback': toast('欢迎到 GitHub 仓库提交 Issue 反馈'); break;
       case 'install': showInstallGuide(); break;
       case 'export': exportCalendar(); break;
+      case 'why': openSheet('锁屏后不响？按顺序排查', [
+        '① 先确认「已导入」而不只是「已下载」：点开 .ics 后，日历里必须能看到事件',
+        '② iPhone 侧边静音键拨到响铃：日历提醒受静音键控制，系统闹钟才不受影响',
+        '③ 关闭「专注模式 / 勿扰模式」，或把日历加入允许通知',
+        '④ 系统设置 → 日历 → 通知 → 允许通知，声音选开启',
+        '⑤ 确认导入到了正在显示的日历（iCloud / 本机），且该日历没被隐藏',
+        '⑥ 用「导出到日历 → 2分钟响铃测试」快速验证到点是否响',
+        '⑦ 仍不响：日历提醒不是闹钟，重要叫早请用系统时钟兜底'
+      ], () => {}); break;
       case 'rate': toast('开源项目暂未上架 App Store'); break;
       case 'holidays': toast('已内置 2026 年节假日与美国感恩节/退伍军人节数据'); break;
       case 'ringtone': toast('铃声可在添加闹钟页自由选择'); break;
