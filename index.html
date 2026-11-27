@@ -29,7 +29,10 @@
           <span id="today-line">11-26 周四 12:22:40</span>
           <span class="holiday-tag" id="holiday-line">Thanksgiving Day</span>
         </div>
-        <button class="mute-chip" id="mute-chip">🔇 您已静音</button>
+        <div class="header-chips">
+          <button class="mute-chip" id="mute-chip">🔇 您已静音</button>
+          <button class="export-chip" id="btn-export-ics">📅 后台也响 · 导出到日历</button>
+        </div>
       </header>
       <div class="search-bar hidden" id="search-bar">
         <input type="search" id="alarm-search" placeholder="搜索闹钟名称 / 备注">
@@ -127,6 +130,7 @@
           <button data-action="help"><span class="ico green">❓</span>使用帮助</button>
           <button data-action="feedback"><span class="ico blue-ico">💬</span>意见反馈</button>
           <button data-action="install"><span class="ico purple">📲</span>添加到桌面 <small class="new-tag">推荐</small></button>
+          <button data-action="export"><span class="ico blue-ico">📅</span>导出闹钟到系统日历 <small class="new-tag">后台也响</small></button>
         </div>
         <div class="profile-card">
           <button data-action="rate"><span class="ico yellow">⭐</span>去 AppStore 评分</button>

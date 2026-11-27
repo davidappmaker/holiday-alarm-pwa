@@ -43,7 +43,9 @@ input { border: 0; outline: 0; background: transparent; }
 .icon-btn { font-size: 20px; padding: 4px; }
 .home-date-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 14px; color: #4a4a50; flex-wrap: wrap; }
 .holiday-tag { background: rgba(255,255,255,.7); border-radius: 10px; padding: 2px 8px; color: #5a5a60; font-size: 13px; }
-.mute-chip { margin-top: 10px; background: rgba(255,255,255,.85); color: #555; border-radius: 16px; padding: 5px 12px; font-size: 13px; }
+.header-chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.mute-chip { background: rgba(255,255,255,.85); color: #555; border-radius: 16px; padding: 5px 12px; font-size: 13px; }
+.export-chip { background: rgba(47,124,246,.12); color: var(--blue-deep); border: 1px solid rgba(47,124,246,.25); border-radius: 16px; padding: 5px 12px; font-size: 13px; }
 .search-bar { padding: 0 16px 10px; background: linear-gradient(180deg, #eaf2ff, var(--bg)); }
 .search-bar input { width: 100%; background: #fff; border-radius: 12px; padding: 11px 14px; box-shadow: var(--shadow); }
 .group-title { font-size: 15px; font-weight: 600; color: #3c3c43; margin: 18px 18px 8px; }
@@ -181,6 +183,10 @@ input { border: 0; outline: 0; background: transparent; }
 .sheet-title { text-align: center; font-weight: 600; margin-bottom: 12px; }
 .sheet-option { width: 100%; padding: 15px 8px; border-bottom: 1px solid var(--line); text-align: center; font-size: 16px; }
 .sheet-option.selected { color: var(--blue); font-weight: 600; }
+.sheet-option.with-preview { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.opt-label { flex: 1; text-align: center; }
+.opt-play { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; background: #eef4ff; color: var(--blue); font-size: 15px; display: flex; align-items: center; justify-content: center; }
+.opt-play:active { background: #d9e8ff; }
 .sheet-cancel { width: 100%; padding: 15px; font-size: 16px; color: #ff3b30; margin-top: 8px; }
 .toast { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); background: rgba(0,0,0,.78); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; z-index: 100; max-width: 88%; text-align: center; }
 

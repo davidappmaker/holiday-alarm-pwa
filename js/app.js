@@ -135,6 +135,93 @@
     return a.type === 'normal' ? 'green' : 'blue';
   }
 
+  /* ---------------- 导出到系统日历（关闭网页也照常提醒） ---------------- */
+  const EXPORT_DAYS = { '未来 1 个月': 31, '未来 3 个月': 92, '未来 1 年': 366 };
+  function earlyMinutes(a) {
+    const s = a.early || '';
+    if (s.indexOf('不提前') >= 0) return 0;
+    const m = s.match(/(\d+)/);
+    if (!m) return 0;
+    return s.indexOf('小时') >= 0 ? (+m[1]) * 60 : (+m[1]);
+  }
+  function expandOccurrences(alarm, from, until, max) {
+    const out = [];
+    let cursor = new Date(from.getTime());
+    for (let guard = 0; out.length < max && guard < max * 3; guard++) {
+      const next = nextOccurrence(alarm, cursor);
+      if (!next || next > until) break;
+      out.push(next);
+      cursor = new Date(next.getTime() + 1000);
+    }
+    return out;
+  }
+  function icsText(s) {
+    return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  }
+  function icsFold(line) {
+    const encoder = new TextEncoder();
+    const out = [];
+    let cur = '', bytes = 0;
+    for (const ch of line) {
+      const n = encoder.encode(ch).length;
+      if (bytes + n > 75) { out.push(cur); cur = ' '; bytes = 1; }
+      cur += ch; bytes += n;
+    }
+    out.push(cur);
+    return out.join('\r\n');
+  }
+  function icsLocal(d) {
+    const p = n => String(n).padStart(2, '0');
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + 'T' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+  function icsUTC(d) {
+    const p = n => String(n).padStart(2, '0');
+    return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) + 'T' + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + 'Z';
+  }
+  function buildICS(days) {
+    const now = new Date();
+    const until = new Date(now.getTime() + days * 86400000);
+    const stamp = icsUTC(now);
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Holiday Alarm PWA//ZH', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:闹钟提醒'];
+    let count = 0;
+    state.alarms.forEach(a => {
+      if (!a.enabled) return;
+      expandOccurrences(a, now, until, 400).forEach(t => {
+        const end = new Date(t.getTime() + 5 * 60000);
+        const title = a.name || TYPES[a.type].label;
+        const desc = [a.note, a.repeat, a.calendarMode === 'lunar' && a.lunarDate ? '农历' + a.lunarDate : ''].filter(Boolean).join(' · ');
+        lines.push('BEGIN:VEVENT',
+          'UID:' + a.id + '-' + icsLocal(t) + '@holiday-alarm-pwa',
+          'DTSTAMP:' + stamp,
+          'DTSTART:' + icsLocal(t),
+          'DTEND:' + icsLocal(end),
+          'SUMMARY:' + icsText(title),
+          'DESCRIPTION:' + icsText(desc || '闹钟提醒'));
+        lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(title + ' 时间到'), 'TRIGGER:-PT0M', 'END:VALARM');
+        const em = earlyMinutes(a);
+        if (em > 0) lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsText(title + ' 提前提醒'), 'TRIGGER:-PT' + em + 'M', 'END:VALARM');
+        lines.push('END:VEVENT');
+        count++;
+      });
+    });
+    lines.push('END:VCALENDAR');
+    return { text: lines.map(icsFold).join('\r\n') + '\r\n', count };
+  }
+  function downloadICS(days) {
+    const out = buildICS(days);
+    if (!out.count) { toast('没有可导出的已开启闹钟'); return; }
+    const blob = new Blob([out.text], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = '闹钟提醒-' + Cal.key(new Date()) + '.ics';
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('已生成 ' + out.count + ' 条提醒，请在下载中打开并添加到日历');
+  }
+  function exportCalendar() {
+    openSheet('导出到系统日历', Object.keys(EXPORT_DAYS), v => downloadICS(EXPORT_DAYS[v]));
+  }
+
   /* ---------------- 页面切换 ---------------- */
   function showPage(name) {
     const map = { home: 'page-home', calendar: 'page-calendar', add: 'page-add', types: 'page-types', reminders: 'page-reminders', profile: 'page-profile' };
@@ -152,14 +239,20 @@
     const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), ms || 2200);
   }
-  function openSheet(title, options, onSelect, selected) {
+  function openSheet(title, options, onSelect, selected, onPreview) {
     $('#sheet-title').textContent = title;
     const box = $('#sheet-options'); box.innerHTML = '';
     options.forEach(o => {
       const label = typeof o === 'string' ? o : o.label;
       const b = document.createElement('button');
-      b.className = 'sheet-option' + (label === selected ? ' selected' : '');
-      b.textContent = label;
+      b.className = 'sheet-option' + (label === selected ? ' selected' : '') + (onPreview ? ' with-preview' : '');
+      if (onPreview && label !== '无铃声') {
+        const span = document.createElement('span'); span.className = 'opt-label'; span.textContent = label;
+        const prev = document.createElement('span'); prev.className = 'opt-play'; prev.textContent = '▶';
+        prev.setAttribute('aria-label', '试听 ' + label);
+        prev.onclick = e => { e.stopPropagation(); onPreview(label); };
+        b.appendChild(span); b.appendChild(prev);
+      } else b.textContent = label;
       b.onclick = () => { closeSheet(); onSelect(label); };
       box.appendChild(b);
     });
@@ -232,6 +325,7 @@
   $('#btn-search').onclick = () => { $('#search-bar').classList.toggle('hidden'); renderHome(); };
   $('#alarm-search').oninput = renderHome;
   $('#mute-chip').onclick = () => { state.muted = !state.muted; save(); renderHome(); toast(state.muted ? '已静音' : '声音已开启'); };
+  $('#btn-export-ics').onclick = exportCalendar;
 
   /* ---------------- 日程 ---------------- */
   let selectedDate = new Date();
@@ -339,7 +433,9 @@
     });
   });
   $('#row-type').onclick = () => { if (!state.hideTypePicker) showPage('types'); else cycleType(); };
-  $('#row-ringtone').onclick = () => openSheet('铃声', RINGTONES, v => { draft.ringtone = v; renderForm(); }, draft.ringtone);
+  $('#row-ringtone').onclick = () => openSheet('铃声 · 点 ▶ 试听', RINGTONES, v => {
+    draft.ringtone = v; renderForm(); playRingtone(v);
+  }, draft.ringtone, v => playRingtone(v));
   $('#row-early').onclick = () => openSheet('提前提醒', EARLY, v => { draft.early = v; renderForm(); }, draft.early);
   $('#row-snooze').onclick = () => openSheet('稍后提醒', SNOOZE, v => { draft.snooze = v; renderForm(); }, draft.snooze);
   $('#row-start').onclick = () => openSheet('起始年份', YEARS, v => {
@@ -435,11 +531,12 @@
       case 'help': openSheet('使用帮助', ['① 点底部 ＋ 添加闹钟，选择公历/农历/弹性', '② 闹钟类型可选普通、轮班、定时、周期、年度、月度', '③ 首页可跳过某次响铃；日程页可标记加班/休假', '④  my页「添加到桌面」可获得全屏体验'], () => {}); break;
       case 'feedback': toast('欢迎到 GitHub 仓库提交 Issue 反馈'); break;
       case 'install': showInstallGuide(); break;
+      case 'export': exportCalendar(); break;
       case 'rate': toast('开源项目暂未上架 App Store'); break;
       case 'holidays': toast('已内置 2026 年节假日与美国感恩节/退伍军人节数据'); break;
       case 'ringtone': toast('铃声可在添加闹钟页自由选择'); break;
       case 'version': toast('闹钟 PWA v1.0.0（2026-11-26）'); break;
-      case 'test': askNotify(true); beep(); vibrate(); break;
+      case 'test': askNotify(true); playRingtone(draft.ringtone); vibrate(); toast('已试听当前铃声并测试振动'); break;
       case 'reset': openSheet('确认清空本机数据？', ['确认清空', '再想想'], v => {
         if (v === '确认清空') { localStorage.removeItem(KEY); location.reload(); }
       }); break;
@@ -475,24 +572,48 @@
     } else if (Notification.permission === 'granted') new Notification(title, { body });
   }
   let audioCtx = null;
-  function beep() {
-    if (state.muted) return;
+  function audio() {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function note(ctx, at, dur, type, from, to, vol) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(from, at);
+    if (to && to !== from) o.frequency.exponentialRampToValueAtTime(to, at + dur);
+    g.gain.setValueAtTime(.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + Math.min(.03, dur / 3));
+    g.gain.exponentialRampToValueAtTime(.0001, at + dur);
+    o.connect(g).connect(ctx.destination);
+    o.start(at); o.stop(at + dur + .02);
+  }
+  /* 用 Web Audio 合成 4 种铃声，无需音频文件，离线也能试听 */
+  function playRingtone(name) {
+    if (!name || name === '无铃声') return;
     try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      [0, .28, .56].forEach((t, i) => {
-        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.type = 'sine'; o.frequency.value = [880, 1100, 880][i];
-        g.gain.setValueAtTime(.0001, audioCtx.currentTime + t);
-        g.gain.exponentialRampToValueAtTime(.3, audioCtx.currentTime + t + .03);
-        g.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime + t + .24);
-        o.connect(g).connect(audioCtx.destination); o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + .25);
-      });
+      const ctx = audio(), t = ctx.currentTime + .03;
+      if (name === '雷达.m4r') {
+        [0, .42, .84].forEach(d => { note(ctx, t + d, .30, 'sine', 1500, 620, .28); note(ctx, t + d + .04, .24, 'triangle', 760, 420, .1); });
+      } else if (name === '鸟鸣') {
+        [0, .20, .40, .60, .80].forEach((d, i) => {
+          note(ctx, t + d, .11, 'sine', 1700 + (i % 2) * 450, 2900, .18);
+          note(ctx, t + d + .12, .09, 'sine', 2700, 1900, .12);
+        });
+      } else if (name === '轻音乐') {
+        [523.25, 659.25, 783.99, 1046.5, 783.99, 659.25].forEach((f, i) => note(ctx, t + i * .22, .42, 'triangle', f, f, .16));
+      } else {
+        [0, .28, .56].forEach((d, i) => note(ctx, t + d, .24, 'sine', [880, 1100, 880][i], [880, 1320, 880][i], .26));
+      }
     } catch (e) { /* 浏览器不支持音频时忽略 */ }
+  }
+  function beep(ringtone) {
+    if (state.muted) return;
+    playRingtone(ringtone || '系统默认');
   }
   function vibrate() { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); }
   function fireAlarm(a, next) {
-    beep(); vibrate(); notify(a.name || TYPES[a.type].label, next.toTimeString().slice(0, 5) + ' 该起床啦！');
+    beep(a.ringtone); vibrate(); notify(a.name || TYPES[a.type].label, next.toTimeString().slice(0, 5) + ' 该起床啦！');
     toast('⏰ ' + (a.name || TYPES[a.type].label) + ' 时间到！', 6000);
     if (a.type === 'once') { a.enabled = false; save(); }
   }
