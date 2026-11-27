@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   const KEY = 'holiday_alarm_pwa_v1';
+  const VERSION = 'v1.3.0';
+  const VERSION_DATE = '2026-11-27';
   const $ = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
 
@@ -36,8 +38,8 @@
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
       return Object.assign({ alarms: [], reminders: { '报时': false, '喝水吃药': false },
-        marks: {}, muted: true, hideTypePicker: false }, raw);
-    } catch (e) { return { alarms: [], reminders: { '报时': false, '喝水吃药': false }, marks: {}, muted: true, hideTypePicker: false }; }
+        marks: {}, muted: true, hideTypePicker: false, exported: {} }, raw);
+    } catch (e) { return { alarms: [], reminders: { '报时': false, '喝水吃药': false }, marks: {}, muted: true, hideTypePicker: false, exported: {} }; }
   }
   function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
   function uid() { return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -192,14 +194,17 @@
     const stamp = icsUTC(now);
     const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Holiday Alarm PWA//ZH', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:闹钟提醒'];
     let count = 0;
+    const events = [];
     state.alarms.forEach(a => {
       if (!a.enabled) return;
       expandOccurrences(a, now, until, 400).forEach(t => {
         const end = new Date(t.getTime() + 5 * 60000);
         const title = a.name || TYPES[a.type].label;
         const desc = [a.note, a.repeat, a.calendarMode === 'lunar' && a.lunarDate ? '农历' + a.lunarDate : ''].filter(Boolean).join(' · ');
+        const uid = a.id + '-' + icsLocal(t) + '@holiday-alarm-pwa';
+        events.push({ alarmId: a.id, uid: uid, start: icsLocal(t), title: title });
         lines.push('BEGIN:VEVENT',
-          'UID:' + a.id + '-' + icsLocal(t) + '@holiday-alarm-pwa',
+          'UID:' + uid,
           'DTSTAMP:' + stamp,
           'DTSTART:' + icsLocal(t),
           'DTEND:' + icsLocal(end),
@@ -213,11 +218,18 @@
       });
     });
     lines.push('END:VCALENDAR');
-    return { text: lines.map(icsFold).join('\r\n') + '\r\n', count };
+    return { text: lines.map(icsFold).join('\r\n') + '\r\n', count, events };
   }
   function downloadICS(days) {
     const out = buildICS(days);
     if (!out.count) { toast('没有可导出的已开启闹钟'); return; }
+    // 记录已导出的事件，删除闹钟时可生成精确的日历取消文件
+    state.exported = state.exported || {};
+    out.events.forEach(ev => {
+      const arr = state.exported[ev.alarmId] = state.exported[ev.alarmId] || [];
+      if (!arr.some(x => x.uid === ev.uid)) arr.push({ uid: ev.uid, start: ev.start, title: ev.title });
+    });
+    save();
     const blob = new Blob([out.text], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -228,6 +240,37 @@
   }
   function exportCalendar() {
     openSheet('导出到系统日历', Object.keys(EXPORT_DAYS), v => downloadICS(EXPORT_DAYS[v]));
+  }
+  function saveBlob(content, filename) {
+    const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = filename;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+  /* 删除闹钟时生成日历取消文件：用相同 UID + STATUS:CANCELLED 让日历移除事件 */
+  function cancelCalendarEvents(alarmId) {
+    const evs = (state.exported || {})[alarmId];
+    if (!evs || !evs.length) return false;
+    const stamp = icsUTC(new Date());
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Holiday Alarm PWA//ZH', 'METHOD:CANCEL', 'CALSCALE:GREGORIAN'];
+    evs.forEach(ev => lines.push('BEGIN:VEVENT', 'UID:' + ev.uid, 'DTSTAMP:' + stamp,
+      'DTSTART:' + ev.start, 'STATUS:CANCELLED', 'SUMMARY:' + icsText(ev.title), 'END:VEVENT'));
+    lines.push('END:VCALENDAR');
+    saveBlob(lines.map(icsFold).join('\r\n') + '\r\n', '取消闹钟提醒-' + Cal.key(new Date()) + '.ics');
+    return true;
+  }
+  function deleteAlarm(id) {
+    const a = state.alarms.find(x => x.id === id); if (!a) return;
+    openSheet('删除闹钟', ['确认删除（同时移除日历提醒）', '仅从本应用删除', '取消'], v => {
+      if (v === '取消') return;
+      if (v.indexOf('同时') >= 0) cancelCalendarEvents(id);
+      if (state.exported) delete state.exported[id];
+      state.alarms = state.alarms.filter(x => x.id !== id);
+      save(); renderHome();
+      toast(v.indexOf('同时') >= 0 ? '已删除，请在日历中导入刚下载的取消文件' : '闹钟已删除');
+    });
   }
 
   /* ---------------- 页面切换 ---------------- */
@@ -297,6 +340,11 @@
       groups[g].sort((x, y) => x.next - y.next);
       const h = document.createElement('div'); h.className = 'group-title'; h.textContent = g; box.appendChild(h);
       groups[g].forEach(({ a, next }) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'swipe-wrap';
+        const del = document.createElement('button');
+        del.className = 'swipe-delete'; del.textContent = '🗑 删除';
+        del.onclick = e => { e.stopPropagation(); wrap.classList.remove('open'); deleteAlarm(a.id); };
         const card = document.createElement('div');
         card.className = 'alarm-card';
         const skipped = a.skipped && a.skipped.includes(Cal.key(next));
@@ -307,15 +355,56 @@
           '<div class="alarm-right"><div class="countdown ' + (next - now < 3600000 ? 'near' : '') + '">' + (a.enabled ? countdownText(next, now) : '已关闭') + '</div>' +
           '<div class="alarm-actions"><button class="skip-btn ' + (skipped ? 'skipped' : '') + '" data-act="skip" data-id="' + a.id + '">' + (skipped ? '已跳过' : '跳过') + '</button>' +
           '<button class="switch ' + switchColor(a) + (a.enabled ? ' on' : '') + '" data-act="toggle" data-id="' + a.id + '" aria-label="开关"></button></div></div></div>';
+        bindSwipe(wrap, card);
         card.addEventListener('click', e => {
           if (e.target.closest('[data-act]')) return;
+          if (wrap.classList.contains('open')) { wrap.classList.remove('open'); return; }
           openEditor(a);
         });
-        box.appendChild(card);
+        wrap.appendChild(card); wrap.insertBefore(del, card);
+        box.appendChild(wrap);
       });
     });
   }
   function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  /* 右划露出删除按钮：触摸与鼠标均可（pointer 事件统一处理） */
+  function bindSwipe(wrap, card) {
+    let x0 = null, y0 = 0, dx = 0, moved = false;
+    const WIDTH = 84;
+    function start(e) {
+      if (e.target.closest('[data-act]') || e.target.closest('.swipe-delete')) return;
+      x0 = e.clientX; y0 = e.clientY; moved = false;
+      card.style.transition = 'none';
+    }
+    function move(e) {
+      if (x0 === null) return;
+      const ddx = e.clientX - x0, ddy = e.clientY - y0;
+      if (!moved && Math.abs(ddy) > Math.abs(ddx)) { x0 = null; return; }
+      if (Math.abs(ddx) > 4) moved = true;
+      if (!moved) return;
+      const base = wrap.classList.contains('open') ? WIDTH : 0;
+      dx = Math.max(0, Math.min(WIDTH, base + ddx));
+      card.style.transform = 'translateX(' + dx + 'px)';
+      if (e.cancelable) e.preventDefault();
+    }
+    function end() {
+      if (x0 === null) return;
+      x0 = null;
+      card.style.transition = 'transform .2s ease';
+      const open = wrap.classList.contains('open');
+      if (!open && dx > WIDTH * .45) wrap.classList.add('open');
+      else if (open && dx < WIDTH * .55) wrap.classList.remove('open');
+      card.style.transform = '';
+      dx = 0;
+    }
+    wrap.addEventListener('pointerdown', start);
+    wrap.addEventListener('pointermove', move);
+    wrap.addEventListener('pointerup', end);
+    wrap.addEventListener('pointercancel', end);
+    wrap.addEventListener('click', e => {
+      if (wrap.classList.contains('open') && !e.target.closest('.swipe-delete')) e.stopPropagation();
+    }, true);
+  }
 
   $('#alarm-groups').addEventListener('click', e => {
     const btn = e.target.closest('[data-act]'); if (!btn) return;
@@ -543,7 +632,7 @@
       case 'rate': toast('开源项目暂未上架 App Store'); break;
       case 'holidays': toast('已内置 2026 年节假日与美国感恩节/退伍军人节数据'); break;
       case 'ringtone': toast('铃声可在添加闹钟页自由选择'); break;
-      case 'version': toast('闹钟 PWA v1.0.0（2026-11-26）'); break;
+      case 'version': toast('闹钟 PWA ' + VERSION + '（' + VERSION_DATE + '）· 右划删除 / 日历同步 / 经典铃声 / 农历闹钟'); break;
       case 'test': askNotify(true); playRingtone(draft.ringtone); vibrate(); toast('已试听当前铃声并测试振动'); break;
       case 'reset': openSheet('确认清空本机数据？', ['确认清空', '再想想'], v => {
         if (v === '确认清空') { localStorage.removeItem(KEY); location.reload(); }
@@ -659,5 +748,6 @@
   /* Service Worker 注册 */
   if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 
+  $('#version-text').textContent = '闹钟 PWA ' + VERSION + ' · 本地数据版';
   showPage('home');
 })();

@@ -1,5 +1,5 @@
 /* 离线缓存：添加到桌面后可无网络打开 */
-const CACHE = 'alarm-pwa-v6';
+const CACHE = 'alarm-pwa-v7';
 const SHELL = [
   './', './index.html', './css/style.css', './js/app.js', './js/calendar.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',

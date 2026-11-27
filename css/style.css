@@ -54,6 +54,12 @@ input { border: 0; outline: 0; background: transparent; }
   margin: 0 16px 12px; padding: 16px 16px 14px; position: relative;
 }
 .alarm-card.top-card { margin-top: 0; }
+/* 右划删除 */
+.swipe-wrap { position: relative; margin: 0 16px 12px; overflow: hidden; border-radius: 18px; background: #ff3b30; touch-action: pan-y; }
+.swipe-wrap .alarm-card { margin: 0; position: relative; z-index: 1; transition: transform .2s ease; }
+.swipe-wrap.open .alarm-card { transform: translateX(84px); }
+.swipe-delete { position: absolute; left: 0; top: 0; bottom: 0; width: 84px; background: #ff3b30; color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; z-index: 0; }
+.swipe-add { position: absolute; right: 0; top: 0; bottom: 0; width: 84px; background: #34c759; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; z-index: 0; }
 .alarm-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .alarm-time { font-size: 40px; font-weight: 500; line-height: 1.05; letter-spacing: -1px; }
 .alarm-note { color: #7b7b82; font-size: 14px; margin-top: 7px; line-height: 1.4; }
